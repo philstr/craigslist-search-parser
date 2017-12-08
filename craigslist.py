@@ -2,6 +2,7 @@
 
 from bs4 import BeautifulSoup
 from urllib2 import urlopen, Request
+import threading
 
 TEST_LOCATION_CODE = "boston"
 TEST_SEARCH_CODE = "bia"
@@ -17,10 +18,26 @@ class Result:
     def __str__(self):
         return "Datetime: {0}  Title: {1} Price: {2}".format(self.datetime, self.title, self.price)
 
+class SeenSet:
+# Very basic wrapper of a set to allow threads to track which results have been seen
+
+    def __init__(self):
+        self.seen_set = set()
+        self.lock = threading.Lock()
+
+    def add(self, result):
+        self.seen_set.add(result.key)
+
+    def contains(self, result):
+        return result.key in self.seen_set
+
+    def get_lock(self):
+        return self.lock
+
+
 def get_craigslist_ads(location_code, search_code):
     url_base = "https://" + location_code + ".craigslist.org/search/" + search_code
     return get_result_list(url_base)
-
 
 def get_result_list(url_base):
     top_soup = get_soup(url_base)
@@ -28,19 +45,30 @@ def get_result_list(url_base):
     total_count = int(top_soup.find("span", class_="totalcount").text)
     number_of_pages = get_number_of_pages(highest_first_page_index, total_count)
     result_list = []
-    seen = set()
+    seen_set = SeenSet()
+    threads = []
 
     for page in xrange(number_of_pages):
         s = page*highest_first_page_index
         url = url_base + "?s=" + str(s)
-        soup = get_soup(url)
-        for entry in soup.find_all("li", class_="result-row"):
-            result = get_result_from_entry(entry)
-            if result is not None and result.key not in seen:
-                result_list.append(result)
-                seen.add(result.key)
+        thread = threading.Thread(target=thread_action, args=(url, result_list, seen_set))
+        threads.append(thread)
+        thread.start()
+    for thread in threads:
+        thread.join()
 
     return result_list
+
+def thread_action(url, result_list, seen_set):
+    soup = get_soup(url)
+    for entry in soup.find_all("li", class_="result-row"):
+        result = get_result_from_entry(entry)
+        if result is not None:
+            seen_set.get_lock().acquire()
+            if not seen_set.contains(result):
+                result_list.append(result)
+                seen_set.add(result)
+            seen_set.get_lock().release()
 
 def get_result_from_entry(entry):
     try:
