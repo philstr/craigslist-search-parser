@@ -4,9 +4,6 @@ from bs4 import BeautifulSoup
 from urllib2 import urlopen, Request
 import threading
 
-TEST_LOCATION_CODE = "boston"
-TEST_SEARCH_CODE = "bia"
-
 class Result:
 
     def __init__(self, title, datetime, price, key):
@@ -15,8 +12,8 @@ class Result:
         self.price = price
         self.key = key
 
-    def __str__(self):
-        return "Datetime: {0}  Title: {1} Price: {2}".format(self.datetime, self.title, self.price)
+    def __repr__(self):
+        return u'Datetime: {0} --- Title: {1} --- Price: {2}'.format(self.datetime, self.title, self.price).encode('utf8', 'replace')
 
 class SeenSet:
 # Very basic wrapper of a set to allow threads to track which results have been seen
@@ -97,9 +94,4 @@ def get_soup(url):
     html = urlopen(req).read()
     soup = BeautifulSoup(html,"lxml")
     return soup
-
-if __name__ == "__main__":
-    print get_craigslist_ads(TEST_LOCATION_CODE, TEST_SEARCH_CODE)
-
-
 
